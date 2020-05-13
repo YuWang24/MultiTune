@@ -1,0 +1,1 @@
+{"nb_epochs": 110, "lr": 0.1, "lr_agent": 0.01, "datadir": "./decathlon-1.0-data/", "imdbdir": "./decathlon-1.0-devkit/decathlon-1.0/annotations/", "ckpdir": "./cv/", "seed": 0, "step1": 40, "step2": 60, "step3": 80}
