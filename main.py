@@ -32,14 +32,11 @@ import pickle
 from make_small_dataset import *
 
 
-#import dataSplitGeneral_cars_allsizes
-
-#import sys
-#reload(sys)
-#sys.setdefaultencoding('utf-8')
+use_multitune = False
+use_air = True
+run_small = False
 
 parser = argparse.ArgumentParser(description='PyTorch SpotTune')
-
 parser.add_argument('--nb_epochs', default=110, type=int, help='nb epochs')
 #parser.add_argument('--nb_epochs', default=50, type=int, help='nb epochs')
 
@@ -52,48 +49,23 @@ parser.add_argument('--ckpdir', default='./cv/', help='folder saving checkpoint'
 
 parser.add_argument('--seed', default=0, type=int, help='seed')
 
-# parser.add_argument('--step1', default=40, type=int, help='nb epochs before first lr decrease')
-# parser.add_argument('--step2', default=60, type=int, help='nb epochs before second lr decrease')
-# parser.add_argument('--step3', default=80, type=int, help='nb epochs before third lr decrease')
-
-# parser.add_argument('--step1', default=20, type=int, help='nb epochs before first lr decrease')
-# parser.add_argument('--step2', default=50, type=int, help='nb epochs before second lr decrease')
-# parser.add_argument('--step3', default=80, type=int, help='nb epochs before third lr decrease')
-
-parser.add_argument('--step1', default=10, type=int, help='nb epochs before first lr decrease')
-parser.add_argument('--step2', default=20, type=int, help='nb epochs before second lr decrease')
-parser.add_argument('--step3', default=50, type=int, help='nb epochs before third lr decrease')
+if use_multitune:
+    parser.add_argument('--step1', default=20, type=int, help='nb epochs before first lr decrease')
+    parser.add_argument('--step2', default=50, type=int, help='nb epochs before second lr decrease')
+    parser.add_argument('--step3', default=80, type=int, help='nb epochs before third lr decrease')
+else:
+    parser.add_argument('--step1', default=40, type=int, help='nb epochs before first lr decrease')
+    parser.add_argument('--step2', default=60, type=int, help='nb epochs before second lr decrease')
+    parser.add_argument('--step3', default=80, type=int, help='nb epochs before third lr decrease')
 
 args = parser.parse_args()
 
-weight_decays = [
-      # ("air",0.0005)
-#     ("imagenet12", 0.0005)   
-    ("aircraft", 0.0005),
-    # ("cifar100", 0.0),
-#    ("daimlerpedcls", 0.0005),
-#    ("dtd", 0.0),
-#    ("gtsrb", 0.0),
-#    ("omniglot", 0.0005),
-#    ("svhn", 0.0),
-#    ("ucf101", 0.0005),
-#    ("vgg-flowers", 0.0001),
-#    ("imagenet12", 0.0001)
-    ]
-
-datasets = [
-      # ("air",0)
-#     ("imagenet12", 0)  
-    ("aircraft", 0),
-    # ("cifar100", 0),
-#    ("daimlerpedcls", 2),
-#    ("dtd", 3),
-#    ("gtsrb", 4),
-#    ("omniglot", 5),
-#    ("svhn", 6),
-#    ("ucf101", 7),
-#    ("vgg-flowers", 8)
-    ]
+if use_air:
+    weight_decays = [("aircraft", 0.0005)]
+    datasets = [("aircraft", 0),]
+else:
+    weight_decays = [("cifar100", 0.0)]
+    datasets = [("cifar100", 0)]    
 
 datasets = collections.OrderedDict(datasets)
 weight_decays = collections.OrderedDict(weight_decays)
@@ -110,158 +82,25 @@ def train(dataset, poch, train_loader, net, agent, net_optimizer, agent_optimize
     tasks_top1 = AverageMeter()
     tasks_losses = AverageMeter()
     
-#    policy_matrix_top = torch.zeros([26, 128, 12], dtype=torch.float64, device=0)
-#    policy_matrix_bottom = torch.zeros([6, 12], dtype=torch.float64, device=0)
-    
-    
     for i, task_batch in enumerate(train_loader):
         images = task_batch[0] 
         labels = task_batch[1]    
         
-#        print(labels.shape)
-#        print(images)
-#        print(images.shape)
-#        print(labels)
-        
         if use_cuda:
-#            images = torch.from_numpy(images)
-#            labels = torch.from_numpy(labels)
-#            images = images.float()
-#            labels = labels.float()
             images, labels = images.cuda(), labels.cuda()
         
         images, labels = Variable(images), Variable(labels)	   
-        
-#        with torch.no_grad():
         probs = agent(images)
 
         action = gumbel_softmax(probs.view(probs.size(0), -1, 2))
         policy = action[:,:,1]
         
-#        if i!=26:
-#            policy_matrix_top[i] = policy
-#        else:
-#            policy_matrix_bottom = policy
-        
-#        print(policy.shape)
-        
-#        with torch.no_grad():
         outputs = net.forward(images, policy)
         _, predicted = torch.max(outputs.data, 1)
-#        print(labels.data.int())
-#        print(predicted)
         correct = predicted.eq(labels.data).cpu().sum()
         tasks_top1.update(correct.item()*100 / (labels.size(0)+0.0), labels.size(0))
-#        '''
-#        weight_basic = torch.zeros([len(labels), 24], dtype=torch.float64, device=0)
-##        print(len(labels))
-#        weight_parallel = torch.zeros([len(labels), 24], dtype=torch.float64, device=0)
-        
-        
-        existing_l2_reg = 0.0
-        new_l2_reg = 0.0
-                        
-        '''
-        for name, w in net.named_parameters():
-            if 'weight' not in name:  # I don't know if that is true: I was told that Facebook regularized biases too.
-                continue
-            if 'downsample.1' in name:  # another bias
-                continue
-            if 'bn' in name:  # bn parameters
-                continue
-        
-            if 'linear' in name:
-                new_l2_reg += torch.pow(w, 2).sum()/2
-#                print ('L2:', name, w.size())
-            else:
-                w0 = w0_dic[name].data
-                w0 = w0.cuda()
-                # if I didn't misunderstand,
-                # pretrained_weights[name] is a `Parameter`, which can be trained;
-                # pretrained_weights[name].data is a `Tensor`, which is considered as a constant.
-                # So here we just want to use w0 as constant and train w.
-                # print type(w0), type(w),
-#                print ('L2-SP:', name, w.size())
-                existing_l2_reg += torch.pow(w-w0, 2).sum()/2
-        
-        l2_reg = existing_l2_reg * 0.01 + new_l2_reg * 0.01
-        '''      
-        '''
-        for b in range(len(labels)):
-            count_p = 0
-            count_b = 0
-            for name, w in net.named_parameters():
-                if name == 'conv1.weight':
-                    w0 = w0_dic[name]
-                    w0 = w0.cuda()
-                    existing_l2_reg += torch.pow(w-w0, 2).sum()/2
-                elif 'linear' in name:
-                        new_l2_reg += torch.pow(w, 2).sum()/2
-                elif 'parallel_blocks' in name:
-                    if 'weight' not in name:  # I don't know if that is true: I was told that Facebook regularized biases too.
-                        continue
-                    if 'downsample.1' in name:  # another bias
-                        continue
-                    if 'bn' in name:  # bn parameters
-                        continue
-                    else:
-                        w0 = w0_dic[name]
-                        w0 = w0.cuda()
-                        # if I didn't misunderstand,
-                        # pretrained_weights[name] is a `Parameter`, which can be trained;
-                        # pretrained_weights[name].data is a `Tensor`, which is considered as a constant.
-                        # So here we just want to use w0 as constant and train w.
-                        # print type(w0), type(w),
-        #                print ('L2-SP:', name, w.size())
-                        weight_parallel[b][count_p] = torch.pow(w-w0, 2).sum()/2
-                        count_p+=1
-                else:
-                    if 'weight' not in name:  # I don't know if that is true: I was told that Facebook regularized biases too.
-                        continue
-                    if 'downsample.1' in name:  # another bias
-                        continue
-                    if 'bn' in name:  # bn parameters
-                        continue
-                    else:
-                        w0 = w0_dic[name]
-                        w0 = w0.cuda()
-                        # if I didn't misunderstand,
-                        # pretrained_weights[name] is a `Parameter`, which can be trained;
-                        # pretrained_weights[name].data is a `Tensor`, which is considered as a constant.
-                        # So here we just want to use w0 as constant and train w.
-                        # print type(w0), type(w),
-        #                print ('L2-SP:', name, w.size())
-#                        print(name)
-                        weight_basic[b][count_b] = torch.pow(w-w0, 2).sum()/2
-                        count_b+=1
-        
-#        print('1', weight_basic)
-#        print('2', weight_parallel.shape)
-        
-        
-        for po in range(len(policy)):
-            count = 0
-            for p in policy[po]:
-                if p.item() == 0:
-                    existing_l2_reg += weight_basic[po][count].float()
-                    existing_l2_reg += weight_basic[po][count+1].float()
-                    count+=2
-                else:
-#                    print(weight_parallel[po][count])
-#                    print('po:', po)
-#                    print('count:', count)
-                    existing_l2_reg += weight_parallel[po][count].float()
-                    existing_l2_reg += weight_parallel[po][count+1].float()
-                    count+=2
-                    
-        l2_reg = existing_l2_reg * 0.01 + new_l2_reg * 0.01
-        '''
-        
-        
-        # Loss
+
         loss = criterion(outputs, labels)
-#        loss += l2_reg
-        
         tasks_losses.update(loss.item(), labels.size(0))
 
         if i % 50 == 0:
@@ -273,7 +112,6 @@ def train(dataset, poch, train_loader, net, agent, net_optimizer, agent_optimize
         net_optimizer.zero_grad()
         agent_optimizer.zero_grad()
 
-#        loss.requires_grad = True
         loss.backward()  
         net_optimizer.step()
         agent_optimizer.step()
@@ -283,7 +121,6 @@ def train(dataset, poch, train_loader, net, agent, net_optimizer, agent_optimize
 def train_no_agent(dataset, poch, train_loader, net, net_optimizer, w0_dict):
     #Train the model
     net.train()
-#    agent.train()
 
     total_step = len(train_loader)
     tasks_top1 = AverageMeter()
@@ -292,38 +129,20 @@ def train_no_agent(dataset, poch, train_loader, net, net_optimizer, w0_dict):
     for i, task_batch in enumerate(train_loader):
         images = task_batch[0] 
         labels = task_batch[1]    
-        
-#        print(images)
-#        print(images.shape)
-#        print(labels)
-        
+     
         if use_cuda:
-#            images = torch.from_numpy(images)
-#            labels = torch.from_numpy(labels)
-#            images = images.float()
-#            labels = labels.float()
             images, labels = images.cuda(), labels.cuda()
         
         images, labels = Variable(images), Variable(labels)	   
-        
-#        with torch.no_grad():
-#        probs = agent(images)
-
-#        action = gumbel_softmax(probs.view(probs.size(0), -1, 2))
-#        policy = action[:,:,1]
-        
-#        with torch.no_grad():
         outputs = net.forward(images, policy=None)
         _, predicted = torch.max(outputs.data, 1)
-#        print(labels.data.int())
-#        print(predicted)
+
         correct = predicted.eq(labels.data).cpu().sum()
         tasks_top1.update(correct.item()*100 / (labels.size(0)+0.0), labels.size(0))
         
         existing_l2_reg = 0.0
         new_l2_reg = 0.0
                         
-        # '''
         for name, w in net.named_parameters():
             if 'weight' not in name:  # I don't know if that is true: I was told that Facebook regularized biases too.
                 continue
@@ -338,16 +157,9 @@ def train_no_agent(dataset, poch, train_loader, net, net_optimizer, w0_dict):
             else:
                 w0 = w0_dic[name].data
                 w0 = w0.cuda()
-                # if I didn't misunderstand,
-                # pretrained_weights[name] is a `Parameter`, which can be trained;
-                # pretrained_weights[name].data is a `Tensor`, which is considered as a constant.
-                # So here we just want to use w0 as constant and train w.
-                # print type(w0), type(w),
-#                print ('L2-SP:', name, w.size())
                 existing_l2_reg += torch.pow(w-w0, 2).sum()/2
         
-        l2_reg = existing_l2_reg * 0.01 + new_l2_reg * 0.01
-        # '''      
+        l2_reg = existing_l2_reg * 0.01 + new_l2_reg * 0.01   
 
         # Loss
         loss = criterion(outputs, labels)
@@ -371,7 +183,7 @@ def train_no_agent(dataset, poch, train_loader, net, net_optimizer, w0_dict):
             
     return tasks_top1.avg , tasks_losses.avg
 
-def test(epoch, val_loader, net, agent, dataset):
+def test(epoch, val_loader, net, agent, dataset, use_multitune):
     net.eval()
     agent.eval()
 
@@ -384,14 +196,18 @@ def test(epoch, val_loader, net, agent, dataset):
                 images, labels = images.cuda(), labels.cuda()
             images, labels = Variable(images), Variable(labels)
 
-       	    probs = agent(images)
-            action = gumbel_softmax(probs.view(probs.size(0), -1, 2))
-            policy = action[:,:,1]
-            # outputs = net.forward(images, policy)
+       	    # The policy network will be used only the original SpotTune is used.
+            if not use_multitune:
+                probs = agent(images)
+                action = gumbel_softmax(probs.view(probs.size(0), -1, 2))
+                policy = action[:,:,1]
             
-#            Test without agent net
-            outputs = net.forward(images, policy=None)
-
+            # If using the MultiTune method, the policy network will not be used.
+            if use_multitune:
+                outputs = net.forward(images, policy=None)
+            else:
+                outputs = net.forward(images, policy)
+            
             _, predicted = torch.max(outputs.data, 1)
             correct = predicted.eq(labels.data).cpu().sum()
             tasks_top1.update(correct.item()*100 / (labels.size(0)+0.0), labels.size(0))
@@ -407,19 +223,12 @@ def test(epoch, val_loader, net, agent, dataset):
     return tasks_top1.avg, tasks_losses.avg
 
 def load_weights_to_flatresnet(source, net, num_class, dataset):
-    
-#    checkpoint = torch.load(source, encoding='iso-8859-1')
-#    source = source.encode('utf-8')
-#    
     from functools import partial
     import pickle
     pickle.load = partial(pickle.load, encoding="latin1")
     pickle.Unpickler = partial(pickle.Unpickler, encoding="latin1")
 #    model = torch.load(model_file, map_location=lambda storage, loc: storage, pickle_module=pickle)
     checkpoint = torch.load(source, map_location=lambda storage, loc: storage, pickle_module=pickle)
-    
-#    print(checkpoint.keys())
-    
     net_old = checkpoint['net']
     
     store_data = []
@@ -484,32 +293,32 @@ def get_model(model, num_class, dataset = None):
         rnet = load_weights_to_flatresnet(source, rnet, num_class, dataset)
     return rnet
 
-def load_data(directory):
-    
+def load_data(directory, use_air):
     with open('./decathlon-1.0-data/' + 'decathlon_mean_std.pickle', 'rb') as handle:
         dict_mean_std = pickle.load(handle, encoding='bytes')
-#        print(dict_mean_std)
     
     num_classes = []
     train_loader = []
     val_loader = []
-    
-    transform = transforms.Compose([
-#    transforms.RandomSizedCrop(224),
-    transforms.Resize(72),
-    transforms.CenterCrop(72),
-#    transforms.RandomResizedCrop(72),
-#    transforms.RandomCrop(64),
-    
-    transforms.RandomHorizontalFlip(),
-    
-    transforms.ToTensor(),
-    transforms.Normalize(mean = dict_mean_std[('aircraftmean').encode('utf-8')],
-                          std = dict_mean_std[('aircraftstd').encode('utf-8')])
-    ])
-    # transforms.Normalize(mean = dict_mean_std[('cifar100mean').encode('utf-8')],
-    #                      std = dict_mean_std[('cifar100std').encode('utf-8')])
-    # ])
+    if use_air:
+        transform = transforms.Compose([
+        transforms.Resize(72),
+        transforms.CenterCrop(72),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean = dict_mean_std[('aircraftmean').encode('utf-8')],
+                              std = dict_mean_std[('aircraftstd').encode('utf-8')])
+        ])
+    else:
+        transform = transforms.Compose([
+        transforms.Resize(72),
+        transforms.CenterCrop(72),
+        transforms.RandomHorizontalFlip(),
+        transforms.ToTensor(),
+        transforms.Normalize(mean = dict_mean_std[('cifar100mean').encode('utf-8')],
+                              std = dict_mean_std[('cifar100std').encode('utf-8')])
+        ])
+        
     traindir = os.path.join(directory, 'train')
     valdir = os.path.join(directory, 'val')
     train = torchvision.datasets.ImageFolder(traindir, transform)
@@ -523,69 +332,30 @@ def load_data(directory):
     
     return train_loader, val_loader, num_classes
 
-def load_car(directory):
-    num_classes = []
-    train_loader = []
-    test_loader = []
-    
-    traindir = os.path.join(directory, 'train')
-    testdir = os.path.join(directory, 'test')
-    normalize = transforms.Normalize(mean=[0.5, 0.5, 0.5],
-                                 std=[0.5, 0.5, 0.5])
-    train_transform = transforms.Compose([
-#    transforms.Scale(342),
-#    transforms.CenterCrop(240),
-#    transforms.Resize((400, 400)),
-    transforms.Resize(72),
-    transforms.CenterCrop(72),
-    transforms.RandomResizedCrop(72),
-    transforms.RandomHorizontalFlip(),
-    transforms.RandomRotation(15),
-    transforms.ToTensor(),
-    normalize
-    ])
-    
-    test_transform = transforms.Compose([
-#    transforms.Scale(342),
-#    transforms.CenterCrop(240),
-#    transforms.Resize((400, 400)),
-    transforms.Resize(72),
-    transforms.CenterCrop(72),
-    transforms.ToTensor(),
-#    transforms.RandomHorizontalFlip(),
-    normalize
-    ])
-    
-    train = torchvision.datasets.ImageFolder(traindir, train_transform)
-    test = torchvision.datasets.ImageFolder(testdir, test_transform)
-    #train_sampler = SubsetRandomSampler(train_idx)
-    train_loader.append(torch.utils.data.DataLoader(
-            train, batch_size=120, shuffle=True,
-            num_workers=0, pin_memory=True)) #, sampler=train_sampler)
-
-        #test_sampler = SubsetRandomSampler(test_idx)
-    test_loader.append(torch.utils.data.DataLoader(test,
-            batch_size=120, shuffle=False,
-            num_workers=0, pin_memory=True))#, sampler=test_sampler)
-    num_classes.append(len(train_loader[0].dataset.classes))
-    
-    return train_loader, test_loader, num_classes
 #####################################
 # Prepare data loaders
-# train_loaders, val_loaders, num_classes = imdbfolder.prepare_data_loaders(datasets.keys(), args.datadir, args.imdbdir, True)
-
-#train_loaders,val_loaders, num_classes = load_data('./air')
-
-#train_loaders,val_loaders, num_classes = load_car('./car')
-
-#train_loaders,val_loaders, num_classes = load_car('./stanford_car/car_data/car_data')
-
-# train_loaders,val_loaders, num_classes = load_data('./decathlon-1.0-data/data/aircraft')
+if use_air:
+    if use_multitune:
+        train_loaders,val_loaders, num_classes = load_data('./decathlon-1.0-data/data/aircraft', use_air)
+    else:
+        train_loaders, val_loaders, num_classes = imdbfolder.prepare_data_loaders(datasets.keys(), args.datadir, args.imdbdir, True)
+else:
+    if use_multitune:
+        train_loaders,val_loaders, num_classes = load_data('./decathlon-1.0-data/data/cifar100', use_air)
+    else:
+        train_loaders, val_loaders, num_classes = imdbfolder.prepare_data_loaders(datasets.keys(), args.datadir, args.imdbdir, True)
 
 # Making a small dataset:
-makeFolder('./cifar')
-moveAllFilesinDir('./decathlon-1.0-data/data/aircraft', './airc/', 10)
-train_loaders,val_loaders, num_classes = load_data('./airc')
+# These lines of code are used for making small datasets, change number_per_class to specify the number of images you want per class,
+# Default is 10.
+if run_small:
+    number_per_class = 10    
+    makeFolder('./small_dataset')
+    if use_air:
+        moveAllFilesinDir('./decathlon-1.0-data/data/aircraft', './small_dataset/', number_per_class)
+    else:
+        moveAllFilesinDir('./decathlon-1.0-data/data/cifar100', './small_dataset/', number_per_class)
+    train_loaders,val_loaders, num_classes = load_data('./small_dataset', use_air)
 
 criterion = nn.CrossEntropyLoss()
 
@@ -607,23 +377,24 @@ for i, dataset in enumerate(datasets.keys()):
     net = get_model("resnet26", num_class, dataset = "imagenet12")
 	
     # Re-initialize last one block: ********************************************************************************
-    for l in range(3,4):
-        for m in net.blocks[2][l].modules():
-                if isinstance(m, nn.Conv2d):
-                    n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                    m.weight.data.normal_(0, math.sqrt(2. / n))
-                elif isinstance(m, nn.BatchNorm2d):
-                    m.weight.data.fill_(1)
-                    m.bias.data.zero_()
-        for m in net.parallel_blocks[2][l].modules():
-                if isinstance(m, nn.Conv2d):
-                    n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                    m.weight.data.normal_(0, math.sqrt(2. / n))
-                elif isinstance(m, nn.BatchNorm2d):
-                    m.weight.data.fill_(1)
-                    m.bias.data.zero_()
+    if use_multitune:
+        for l in range(3,4):
+            for m in net.blocks[2][l].modules():
+                    if isinstance(m, nn.Conv2d):
+                        n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                        m.weight.data.normal_(0, math.sqrt(2. / n))
+                    elif isinstance(m, nn.BatchNorm2d):
+                        m.weight.data.fill_(1)
+                        m.bias.data.zero_()
+            for m in net.parallel_blocks[2][l].modules():
+                    if isinstance(m, nn.Conv2d):
+                        n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                        m.weight.data.normal_(0, math.sqrt(2. / n))
+                    elif isinstance(m, nn.BatchNorm2d):
+                        m.weight.data.fill_(1)
+                        m.bias.data.zero_()
                     
-#    '''
+    # Extract the intitial weights transferred from ImageNet 
     w0_dic = {}
     
     for name,w in net.named_parameters():
@@ -633,87 +404,63 @@ for i, dataset in enumerate(datasets.keys()):
             continue
         if 'bn' in name:  # bn parameters
             continue
-    
-#        if 'fc' in name:
-#            new_l2_reg += torch.pow(w, 2).sum()
-#            print 'L2:', name, w.size()
         else:
             w0 = w
-            # if I didn't misunderstand,
-            # pretrained_weights[name] is a `Parameter`, which can be trained;
-            # pretrained_weights[name].data is a `Tensor`, which is considered as a constant.
-            # So here we just want to use w0 as constant and train w.
-            # print type(w0), type(w),
             w0_dic[name] = w0
-#            print 'L2-SP:', name, w.size()
-#            existing_l2_reg += torch.pow(w-w0, 2).sum()
-#    print(w0_dic.keys())
-#    '''
+
     
     agent = agent_net.resnet(sum(net.layer_config) * 2)
 	
     # freeze the original blocks ************************************************************************************
-    '''
-    flag = True
-    for name, m in net.named_modules():
-        if isinstance(m, nn.Conv2d) and 'parallel_blocks' not in name:
-            if flag is True:
-                flag = False
-            else:
-                m.weight.requires_grad = False
-    '''
-    
+    # Used when only original SpotTune code is used
+    if not use_multitune:
+        flag = True
+        for name, m in net.named_modules():
+            if isinstance(m, nn.Conv2d) and 'parallel_blocks' not in name:
+                if flag is True:
+                    flag = False
+                else:
+                    m.weight.requires_grad = False
+
     use_cuda = torch.cuda.is_available()
     if use_cuda:
         net.cuda()
         agent.cuda()
-
         cudnn.benchmark = True
-#        cudnn.enabled = False
-        
         torch.cuda.manual_seed_all(args.seed)
-        #net = nn.DataParallel(net)
-        #agent = nn.DataParallel(agent)
+
     
     # Different learning rate for different layers:
-    # '''
-    high_lr = 0.1
-    low_lr = 0.01
-    
-    params_dict = dict(net.named_parameters())
-    params = []
-    #print(params_dict.keys())
-    j = 0
-    for key, value in reversed(list(params_dict.items())):
-        if 'parallel_blocks' in key:
-            # j+=1
-    #        print(key.split('.')[1])
-            if(not(key.split('.')[1].isdigit())):
-                # print(1)
-                params += [{'params':[value],'lr':args.lr, 'name': key}]  
-            elif(int(key.split('.')[1]))<2:
-                # print(2)
-                params += [{'params':[value],'lr':high_lr, 'name': key}] 
+    # Used only is MultiTune is used.
+    if use_multitune:
+        high_lr = 0.1
+        low_lr = 0.01
+        
+        params_dict = dict(net.named_parameters())
+        params = []
+        #print(params_dict.keys())
+        j = 0
+        for key, value in reversed(list(params_dict.items())):
+            if 'parallel_blocks' in key:
+                if(not(key.split('.')[1].isdigit())):
+                    params += [{'params':[value],'lr':args.lr, 'name': key}]  
+                elif(int(key.split('.')[1]))<2:
+                    params += [{'params':[value],'lr':high_lr, 'name': key}] 
+                else:
+                    params += [{'params':[value],'lr':low_lr, 'name': key}]   
             else:
-                # print(3)
-                params += [{'params':[value],'lr':low_lr, 'name': key}]   
-            # print(j)
-        else:
-            if(not(key.split('.')[1].isdigit())):
-                # print(1)
-                params += [{'params':[value],'lr':args.lr, 'name': key}]  
-            elif(int(key.split('.')[1]))<2:
-                # print(2)
-                params += [{'params':[value],'lr':args.lr, 'name': key}] 
-            else:
-                # print(3)
-                params += [{'params':[value],'lr':args.lr, 'name': key}]   
-            
-
-    optimizer = optim.SGD(params, momentum=0.9, weight_decay= weight_decays[dataset])
-    # '''
+                if(not(key.split('.')[1].isdigit())):
+                    params += [{'params':[value],'lr':args.lr, 'name': key}]  
+                elif(int(key.split('.')[1]))<2:
+                    params += [{'params':[value],'lr':args.lr, 'name': key}] 
+                else:
+                    params += [{'params':[value],'lr':args.lr, 'name': key}]   
+                
     
-    # optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr= args.lr, momentum=0.9, weight_decay= weight_decays[dataset])
+        optimizer = optim.SGD(params, momentum=0.9, weight_decay= weight_decays[dataset])
+    else:
+        optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr= args.lr, momentum=0.9, weight_decay= weight_decays[dataset])
+    
     agent_optimizer = optim.SGD(agent.parameters(), lr= args.lr_agent, momentum= 0.9, weight_decay= 0.001)
 
     start_epoch = 0
@@ -743,10 +490,12 @@ for i, dataset in enumerate(datasets.keys()):
         adjust_learning_rate_agent(agent_optimizer, epoch, args)
 
         st_time = time.time()
-        # train_acc, train_loss = train(dataset, epoch, train_loaders[datasets[dataset]], net, agent, optimizer, agent_optimizer, w0_dic)
-        train_acc, train_loss = train_no_agent(dataset, epoch, train_loaders[datasets[dataset]], net, optimizer, w0_dic)
-        
-        test_acc, test_loss = test(epoch, val_loaders[datasets[dataset]], net, agent, dataset)
+        if use_multitune:
+            train_acc, train_loss = train_no_agent(dataset, epoch, train_loaders[datasets[dataset]], net, optimizer, w0_dic)
+        else:
+            train_acc, train_loss = train(dataset, epoch, train_loaders[datasets[dataset]], net, agent, optimizer, agent_optimizer, w0_dic)
+
+        test_acc, test_loss = test(epoch, val_loaders[datasets[dataset]], net, agent, dataset, use_multitune)
         
         epoch_accuracy.append(test_acc)
         
@@ -760,8 +509,11 @@ for i, dataset in enumerate(datasets.keys()):
         total_time += time.time()-st_time
         print('Epoch lasted {0}'.format(time.time()-st_time))
         print('Best test accuracy:', best_acc)
-         
-    plt.plot(epoch_accuracy)    
+    
+    plt.figure(figsize=(15,10))     
+    plt.plot(epoch_accuracy)
+    plt.ylabel('Validation Accuracy (%)')
+    plt.xlabel('Number of Epoch')    
     plt.show()
     plt.savefig('epoch_accuracy.png')
     print('Total time used:', total_time/60.0)
