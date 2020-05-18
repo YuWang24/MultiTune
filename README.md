@@ -14,4 +14,5 @@ To run the code, run the **main.py** with your IDE. To see the results of MultiT
 **References:**
 
 Guo, Yunhui et al. (2018). “SpotTune: Transfer Learning through AdaptiveFine-tuning”. In:CoRRabs/1811.08737. arXiv:1811.08737. URL:http://arxiv.org/abs/1811.08737.
+
 Rebuffi, Sylvestre-Alvise, Hakan Bilen, and Andrea Vedaldi (2017). “Learn-ing multiple visual domains with residual adapters”. In:CoRRabs/1705.08045. arXiv:1705.08045. URL:http://arxiv.org/abs/1705.08045.
