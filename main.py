@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 import imdbfolder as imdbfolder
 from spottune_models import *
-import models
+# import models
 import agent_net
 
 from utils import *
@@ -32,7 +32,7 @@ import pickle
 from make_small_dataset import *
 
 
-use_multitune = False
+use_multitune = True
 use_air = True
 run_small = False
 
