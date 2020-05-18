@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 
 import imdbfolder as imdbfolder
 from spottune_models import *
-# import models
+import models
 import agent_net
 
 from utils import *
