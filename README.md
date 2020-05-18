@@ -10,3 +10,7 @@ The core blocks of code and the architecture of CNN are based on the paper of Sp
 **Instruction for running the code:**
 
 To run the code, run the **main.py** with your IDE. To see the results of MultiTune proposed in this project, just run the code AS IS. To compare the SpotTune's result, please turn ***use_multitune*** in **main.py** to **False**. To change the dataset to Cifar100, just download the dataset and put into the correct location, then change ***use_air*** in **main.py** to **False**. To test MultiTune on smaller dataset, turn ***run_small*** in **main.py** to **True** and change ***number_per_class*** (the number of images per class) in line 352 in **main.py**. 
+
+**References:**
+Guo, Yunhui et al. (2018). “SpotTune: Transfer Learning through AdaptiveFine-tuning”. In:CoRRabs/1811.08737. arXiv:1811.08737. URL:http://arxiv.org/abs/1811.08737.
+Rebuffi, Sylvestre-Alvise, Hakan Bilen, and Andrea Vedaldi (2017). “Learn-ing multiple visual domains with residual adapters”. In:CoRRabs/1705.08045. arXiv:1705.08045. URL:http://arxiv.org/abs/1705.08045.
