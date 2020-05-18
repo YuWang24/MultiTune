@@ -95,7 +95,7 @@ def train(dataset, poch, train_loader, net, agent, net_optimizer, agent_optimize
         action = gumbel_softmax(probs.view(probs.size(0), -1, 2))
         policy = action[:,:,1]
         
-        outputs = net.forward(images, policy)
+        outputs = net.forward(images, use_multitune, policy)
         _, predicted = torch.max(outputs.data, 1)
         correct = predicted.eq(labels.data).cpu().sum()
         tasks_top1.update(correct.item()*100 / (labels.size(0)+0.0), labels.size(0))
@@ -134,7 +134,7 @@ def train_no_agent(dataset, poch, train_loader, net, net_optimizer, w0_dict):
             images, labels = images.cuda(), labels.cuda()
         
         images, labels = Variable(images), Variable(labels)	   
-        outputs = net.forward(images, policy=None)
+        outputs = net.forward(images, use_multitune, policy=None)
         _, predicted = torch.max(outputs.data, 1)
 
         correct = predicted.eq(labels.data).cpu().sum()
@@ -204,9 +204,9 @@ def test(epoch, val_loader, net, agent, dataset, use_multitune):
             
             # If using the MultiTune method, the policy network will not be used.
             if use_multitune:
-                outputs = net.forward(images, policy=None)
+                outputs = net.forward(images, use_multitune, policy=None)
             else:
-                outputs = net.forward(images, policy)
+                outputs = net.forward(images, use_multitune, policy)
             
             _, predicted = torch.max(outputs.data, 1)
             correct = predicted.eq(labels.data).cpu().sum()

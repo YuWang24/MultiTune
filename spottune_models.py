@@ -103,7 +103,7 @@ class ResNet(nn.Module):
 
         return layers, downsample
 
-    def forward(self, x, policy=None):
+    def forward(self, x, use_multitune, policy=None):
         t = 0
         x = self.seed(x)
     
@@ -121,18 +121,10 @@ class ResNet(nn.Module):
                         f1 = F.relu(residual + output)
                         f2 = F.relu(residual_ + output_)
                         x = f1*(1-action_mask) + f2*action_mask
-#                        print(x.shape)
                         t += 1
-#                        print(segment, num_blocks)
-#                    for m in self.modules():
-#                        print(m)
-#                        print(action.shape)
             x = self.bn2(x)
-#           print(x.shape)
             x = self.avgpool(x)
-#           print(x.shape)
             x = x.view(x.size(0), -1)
-#           print(x.shape)
             x = self.linear(x)
         else:
             for segment, num_blocks in enumerate(self.layer_config):
@@ -144,42 +136,23 @@ class ResNet(nn.Module):
                     output_ = self.parallel_blocks[segment][b](x)
                     
                     x = F.relu(residual + output)
-#                    f1 = F.relu(residual + output)
                     f2 = F.relu(residual_ + output_)
-#                    print(f2)
-                    
-#                    print(f1.shape)
-                    
                     t += 1
-            '''
-            x = self.bn2(x)
-    #        print(x.shape)
-            x = self.avgpool(x)
-    #        print(x.shape)
-            x = x.view(x.size(0), -1)
-    #        print(x.shape)
-            x = self.linear(x)
-#            print(x.shape)
-            '''
-            
-            # '''
-            f1 = self.bn2(x)
-    #        print(f1.shape)
-            f1 = self.avgpool(f1)
-    #        print(f1.shape)
-            f1 = f1.view(f1.size(0),-1)
-    #        print(f1.shape)
-            
-            f2 = self.bn2(f2)
-    #        print(f2.shape)
-            f2 = self.avgpool(f2)
-    #        print(f2.shape)
-            f2 = f2.view(f2.size(0),-1)
-    #        print(f2.shape)
-            
-            x = torch.cat((0.5*f1,0.5*f2),1)
-            x = self.linear_attn(x)
-            # '''
+            # Code will be implemented if SpotTune is used.
+            if not use_multitune:
+                x = self.bn2(x)
+                x = self.avgpool(x)
+                x = x.view(x.size(0), -1)
+                x = self.linear(x)
+            else: # Code will be implemented if MultiTune is used. 
+                f1 = self.bn2(x)
+                f1 = self.avgpool(f1)
+                f1 = f1.view(f1.size(0),-1)
+                f2 = self.bn2(f2)
+                f2 = self.avgpool(f2)
+                f2 = f2.view(f2.size(0),-1)
+                x = torch.cat((0.5*f1,0.5*f2),1)
+                x = self.linear_attn(x)
         return x
 
 def resnet26(num_class=10, blocks=BasicBlock):
