@@ -32,9 +32,10 @@ import pickle
 from make_small_dataset import *
 
 
-use_multitune = False
+use_multitune = True
 use_air = True
 run_small = False
+run_iteration = True
 
 parser = argparse.ArgumentParser(description='PyTorch SpotTune')
 parser.add_argument('--nb_epochs', default=110, type=int, help='nb epochs')
@@ -359,169 +360,182 @@ if run_small:
 
 criterion = nn.CrossEntropyLoss()
 
-for i, dataset in enumerate(datasets.keys()):
-    print (dataset) 
-    pretrained_model_dir = args.ckpdir + dataset
+# Run several iterations to minimize the randomness. 
+number_of_iteration = 1
+if run_iteration:
+    number_of_iteration = 5
+    print("********** Running %d iterations.**********"  %number_of_iteration)
+else:
+    number_of_iteration = 1
+best_acc_list = []
+time_list = []
 
-    if not os.path.isdir(pretrained_model_dir):
-        os.mkdir(pretrained_model_dir)
-
-    results = np.zeros((4, args.nb_epochs, len(num_classes)))
-    f = pretrained_model_dir + "/params.json"
-    with open(f, 'w') as fh:
-#        print(vars(args))
-#        print(fh)
-        json.dump(vars(args), fh)     
-
-    num_class = num_classes[datasets[dataset]]
-    net = get_model("resnet26", num_class, dataset = "imagenet12")
-	
-    # Re-initialize last one block: ********************************************************************************
-    if use_multitune:
-        for l in range(3,4):
-            for m in net.blocks[2][l].modules():
-                    if isinstance(m, nn.Conv2d):
-                        n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                        m.weight.data.normal_(0, math.sqrt(2. / n))
-                    elif isinstance(m, nn.BatchNorm2d):
-                        m.weight.data.fill_(1)
-                        m.bias.data.zero_()
-            for m in net.parallel_blocks[2][l].modules():
-                    if isinstance(m, nn.Conv2d):
-                        n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
-                        m.weight.data.normal_(0, math.sqrt(2. / n))
-                    elif isinstance(m, nn.BatchNorm2d):
-                        m.weight.data.fill_(1)
-                        m.bias.data.zero_()
-                    
-    # Extract the intitial weights transferred from ImageNet 
-    w0_dic = {}
+for r in range(number_of_iteration):
+    for i, dataset in enumerate(datasets.keys()):
+        print (dataset) 
+        pretrained_model_dir = args.ckpdir + dataset
     
-    for name,w in net.named_parameters():
-        if 'weight' not in name:  # I don't know if that is true: I was told that Facebook regularized biases too.
-            continue
-        if 'downsample.1' in name:  # another bias
-            continue
-        if 'bn' in name:  # bn parameters
-            continue
-        else:
-            w0 = w
-            w0_dic[name] = w0
-
+        if not os.path.isdir(pretrained_model_dir):
+            os.mkdir(pretrained_model_dir)
     
-    agent = agent_net.resnet(sum(net.layer_config) * 2)
-	
-    # freeze the original blocks ************************************************************************************
-    # Used when only original SpotTune code is used
-    if not use_multitune:
-        flag = True
-        for name, m in net.named_modules():
-            if isinstance(m, nn.Conv2d) and 'parallel_blocks' not in name:
-                if flag is True:
-                    flag = False
-                else:
-                    m.weight.requires_grad = False
-
-    use_cuda = torch.cuda.is_available()
-    if use_cuda:
-        net.cuda()
-        agent.cuda()
-        cudnn.benchmark = True
-        torch.cuda.manual_seed_all(args.seed)
-
+        results = np.zeros((4, args.nb_epochs, len(num_classes)))
+        f = pretrained_model_dir + "/params.json"
+        with open(f, 'w') as fh:
+    #        print(vars(args))
+    #        print(fh)
+            json.dump(vars(args), fh)     
     
-    # Different learning rate for different layers:
-    # Used only is MultiTune is used.
-    if use_multitune:
-        high_lr = 0.1
-        low_lr = 0.01
-        
-        params_dict = dict(net.named_parameters())
-        params = []
-        #print(params_dict.keys())
-        j = 0
-        for key, value in reversed(list(params_dict.items())):
-            if 'parallel_blocks' in key:
-                if(not(key.split('.')[1].isdigit())):
-                    params += [{'params':[value],'lr':args.lr, 'name': key}]  
-                elif(int(key.split('.')[1]))<2:
-                    params += [{'params':[value],'lr':high_lr, 'name': key}] 
-                else:
-                    params += [{'params':[value],'lr':low_lr, 'name': key}]   
-            else:
-                if(not(key.split('.')[1].isdigit())):
-                    params += [{'params':[value],'lr':args.lr, 'name': key}]  
-                elif(int(key.split('.')[1]))<2:
-                    params += [{'params':[value],'lr':args.lr, 'name': key}] 
-                else:
-                    params += [{'params':[value],'lr':args.lr, 'name': key}]   
-                
-    
-        optimizer = optim.SGD(params, momentum=0.9, weight_decay= weight_decays[dataset])
-    else:
-        optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr= args.lr, momentum=0.9, weight_decay= weight_decays[dataset])
-    
-    agent_optimizer = optim.SGD(agent.parameters(), lr= args.lr_agent, momentum= 0.9, weight_decay= 0.001)
-
-    start_epoch = 0
-    best_acc = 0.0
-    
-    epoch_accuracy = []
-    total_time = 0.0
-    
-    '''
-    lr_decay = [25, 20, 20]
-#    lr_decay = [35, 30, 30]
-    decay_value = [0.2, 0.4, 0.4]
-#    decay_value = [0.1, 0.2, 0.2]
-    lr_decay1 = 40
-
-    for epoch in range(start_epoch, start_epoch+args.nb_epochs):
-        if(epoch>1):
-            adjust_learning_rate(optimizer, epoch, lr_decay, lr_decay1, decay_value)
-            adjust_learning_rate(agent_optimizer, epoch, lr_decay, lr_decay1, decay_value)
-            
-    '''
-    
-#    lrscheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=3, threshold = 0.9)
-
-    for epoch in range(start_epoch, start_epoch+args.nb_epochs):
-        adjust_learning_rate_net(optimizer, epoch, args)
-        adjust_learning_rate_agent(agent_optimizer, epoch, args)
-
-        st_time = time.time()
+        num_class = num_classes[datasets[dataset]]
+        net = get_model("resnet26", num_class, dataset = "imagenet12")
+    	
+        # Re-initialize last one block: ********************************************************************************
         if use_multitune:
-            train_acc, train_loss = train_no_agent(dataset, epoch, train_loaders[datasets[dataset]], net, optimizer, w0_dic)
+            for l in range(3,4):
+                for m in net.blocks[2][l].modules():
+                        if isinstance(m, nn.Conv2d):
+                            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                            m.weight.data.normal_(0, math.sqrt(2. / n))
+                        elif isinstance(m, nn.BatchNorm2d):
+                            m.weight.data.fill_(1)
+                            m.bias.data.zero_()
+                for m in net.parallel_blocks[2][l].modules():
+                        if isinstance(m, nn.Conv2d):
+                            n = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
+                            m.weight.data.normal_(0, math.sqrt(2. / n))
+                        elif isinstance(m, nn.BatchNorm2d):
+                            m.weight.data.fill_(1)
+                            m.bias.data.zero_()
+                        
+        # Extract the intitial weights transferred from ImageNet 
+        w0_dic = {}
+        
+        for name,w in net.named_parameters():
+            if 'weight' not in name:  # I don't know if that is true: I was told that Facebook regularized biases too.
+                continue
+            if 'downsample.1' in name:  # another bias
+                continue
+            if 'bn' in name:  # bn parameters
+                continue
+            else:
+                w0 = w
+                w0_dic[name] = w0
+    
+        
+        agent = agent_net.resnet(sum(net.layer_config) * 2)
+    	
+        # freeze the original blocks ************************************************************************************
+        # Used when only original SpotTune code is used
+        if not use_multitune:
+            flag = True
+            for name, m in net.named_modules():
+                if isinstance(m, nn.Conv2d) and 'parallel_blocks' not in name:
+                    if flag is True:
+                        flag = False
+                    else:
+                        m.weight.requires_grad = False
+    
+        use_cuda = torch.cuda.is_available()
+        if use_cuda:
+            net.cuda()
+            agent.cuda()
+            cudnn.benchmark = True
+            torch.cuda.manual_seed_all(args.seed)
+    
+        
+        # Different learning rate for different layers:
+        # Used only is MultiTune is used.
+        if use_multitune:
+            high_lr = 0.1
+            low_lr = 0.01
+            
+            params_dict = dict(net.named_parameters())
+            params = []
+            #print(params_dict.keys())
+            j = 0
+            for key, value in reversed(list(params_dict.items())):
+                if 'parallel_blocks' in key:
+                    if(not(key.split('.')[1].isdigit())):
+                        params += [{'params':[value],'lr':args.lr, 'name': key}]  
+                    elif(int(key.split('.')[1]))<2:
+                        params += [{'params':[value],'lr':high_lr, 'name': key}] 
+                    else:
+                        params += [{'params':[value],'lr':low_lr, 'name': key}]   
+                else:
+                    if(not(key.split('.')[1].isdigit())):
+                        params += [{'params':[value],'lr':args.lr, 'name': key}]  
+                    elif(int(key.split('.')[1]))<2:
+                        params += [{'params':[value],'lr':args.lr, 'name': key}] 
+                    else:
+                        params += [{'params':[value],'lr':args.lr, 'name': key}]   
+                    
+        
+            optimizer = optim.SGD(params, momentum=0.9, weight_decay= weight_decays[dataset])
         else:
-            train_acc, train_loss = train(dataset, epoch, train_loaders[datasets[dataset]], net, agent, optimizer, agent_optimizer, w0_dic)
-
-        test_acc, test_loss = test(epoch, val_loaders[datasets[dataset]], net, agent, dataset, use_multitune)
+            optimizer = optim.SGD(filter(lambda p: p.requires_grad, net.parameters()), lr= args.lr, momentum=0.9, weight_decay= weight_decays[dataset])
         
-        epoch_accuracy.append(test_acc)
-        
-        if test_acc > best_acc:
-            best_acc = test_acc
-        
-        # Record statistics
-        results[0:2,epoch,i] = [train_loss, train_acc]
-        results[2:4,epoch,i] = [test_loss,test_acc]
-        
-        total_time += time.time()-st_time
-        print('Epoch lasted {0}'.format(time.time()-st_time))
-        print('Best test accuracy:', best_acc)
+        agent_optimizer = optim.SGD(agent.parameters(), lr= args.lr_agent, momentum= 0.9, weight_decay= 0.001)
     
-    plt.figure(figsize=(15,10))     
-    plt.plot(epoch_accuracy)
-    plt.ylabel('Validation Accuracy (%)')
-    plt.xlabel('Number of Epoch')    
-    plt.show()
-    plt.savefig('epoch_accuracy.png')
-    print('Total time used:', total_time/60.0)
+        start_epoch = 0
+        best_acc = 0.0
+        
+        epoch_accuracy = []
+        total_time = 0.0
+        
+        '''
+        lr_decay = [25, 20, 20]
+    #    lr_decay = [35, 30, 30]
+        decay_value = [0.2, 0.4, 0.4]
+    #    decay_value = [0.1, 0.2, 0.2]
+        lr_decay1 = 40
     
-    state = {
-        'net': net,
-        'agent': agent,
-    }
-
-    torch.save(state, pretrained_model_dir +'/' + dataset + '.t7')
-    np.save(pretrained_model_dir + '/statistics', results)
+        for epoch in range(start_epoch, start_epoch+args.nb_epochs):
+            if(epoch>1):
+                adjust_learning_rate(optimizer, epoch, lr_decay, lr_decay1, decay_value)
+                adjust_learning_rate(agent_optimizer, epoch, lr_decay, lr_decay1, decay_value)
+                
+        '''
+        
+    #    lrscheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=3, threshold = 0.9)
+    
+        for epoch in range(start_epoch, start_epoch+args.nb_epochs):
+            adjust_learning_rate_net(optimizer, epoch, args)
+            adjust_learning_rate_agent(agent_optimizer, epoch, args)
+    
+            st_time = time.time()
+            if use_multitune:
+                train_acc, train_loss = train_no_agent(dataset, epoch, train_loaders[datasets[dataset]], net, optimizer, w0_dic)
+            else:
+                train_acc, train_loss = train(dataset, epoch, train_loaders[datasets[dataset]], net, agent, optimizer, agent_optimizer, w0_dic)
+    
+            test_acc, test_loss = test(epoch, val_loaders[datasets[dataset]], net, agent, dataset, use_multitune)
+            
+            epoch_accuracy.append(test_acc)
+            
+            if test_acc > best_acc:
+                best_acc = test_acc
+            
+            # Record statistics
+            results[0:2,epoch,i] = [train_loss, train_acc]
+            results[2:4,epoch,i] = [test_loss,test_acc]
+            
+            total_time += time.time()-st_time
+            print('Epoch lasted {0}'.format(time.time()-st_time))
+            print('Best test accuracy:', best_acc)
+        
+        best_acc_list.append(best_acc)
+        time_list.append(total_time/60.0)
+        plt.figure(figsize=(15,10))     
+        plt.plot(epoch_accuracy)
+        plt.ylabel('Validation Accuracy (%)')
+        plt.xlabel('Number of Epoch')    
+        plt.show()
+        plt.savefig('epoch_accuracy.png')
+        print('Total time used:', total_time/60.0)
+        
+        state = {
+            'net': net,
+            'agent': agent,
+        }
+    
+        torch.save(state, pretrained_model_dir +'/' + dataset + '.t7')
+        np.save(pretrained_model_dir + '/statistics', results)
