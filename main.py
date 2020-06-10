@@ -17,8 +17,9 @@ import json
 import collections
 import math
 
+import tkinter
 import matplotlib
-matplotlib.use('TkAgg')
+matplotlib.use('TkAgg', warn=False, force=True)
 import matplotlib.pyplot as plt
 
 import imdbfolder as imdbfolder
@@ -32,10 +33,10 @@ import pickle
 from make_small_dataset import *
 
 
-use_multitune = False
+use_multitune = True
 use_air = True
 run_small = False
-run_iteration = True
+run_iteration = False
 
 parser = argparse.ArgumentParser(description='PyTorch SpotTune')
 parser.add_argument('--nb_epochs', default=110, type=int, help='nb epochs')
@@ -537,5 +538,5 @@ for r in range(number_of_iteration):
             'agent': agent,
         }
     
-        torch.save(state, pretrained_model_dir +'/' + dataset + '.t7')
+        # torch.save(state, pretrained_model_dir +'/' + dataset + '.t7')
         np.save(pretrained_model_dir + '/statistics', results)
