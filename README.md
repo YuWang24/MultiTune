@@ -8,10 +8,15 @@ This project is an individual research project submitted to The Autralian Nation
 The core blocks of code and the architecture of CNN are based on the paper of SpotTune written by Guo et al. (Guo et al., 2018) Their research on GitHub can be found on https://github.com/gyhui14/spottune. 
 
 **Environments Used:**
+
 PyTorch: 1.2.0
+
 Python: 3.6.10
+
 torchvision: 0.4.0
+
 CUDA: 10.1
+
 GPU: Nvidia GTX 1060 (6GB version)
 
 **Instruction for running the code:**
