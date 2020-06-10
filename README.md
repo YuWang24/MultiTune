@@ -7,6 +7,13 @@ This project is an individual research project submitted to The Autralian Nation
 
 The core blocks of code and the architecture of CNN are based on the paper of SpotTune written by Guo et al. (Guo et al., 2018) Their research on GitHub can be found on https://github.com/gyhui14/spottune. 
 
+**Environments Used:**
+PyTorch: 1.2.0
+Python: 3.6.10
+torchvision: 0.4.0
+CUDA: 10.1
+GPU: Nvidia GTX 1060 (6GB version)
+
 **Instruction for running the code:**
 
 To run the code, run the **main.py** with your IDE. To see the results of MultiTune proposed in this project, just run the code **AS IS**. To compare the SpotTune's result, please turn ***use_multitune*** in **main.py** to **False**. To change the dataset to Cifar100, just download the dataset and put into the correct location, then change ***use_air*** in **main.py** to **False**. To test MultiTune on smaller dataset, turn ***run_small*** in **main.py** to **True** and change ***number_per_class*** (the number of images per class) in line 352 in **main.py**. To get average results for multiple iterations, turn ***run_iteration*** in **main.py** to **True**, and change ***number_of_iteration*** in line 366 to the number of iterations you want to run. 
