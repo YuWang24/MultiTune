@@ -32,7 +32,7 @@ import pickle
 from make_small_dataset import *
 
 
-use_multitune = True
+use_multitune = False
 use_air = True
 run_small = False
 run_iteration = True
