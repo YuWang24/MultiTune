@@ -7,6 +7,11 @@ This project is an individual research project submitted to The Australian Natio
 
 The core blocks of code and the architecture of CNN are based on the paper of SpotTune written by Guo et al. (Guo et al., 2018) Their research on GitHub can be found at https://github.com/gyhui14/spottune. 
 
+**Publication:**
+The research paper of this project is accepted by ICONIP2020, and is published on the Springer CCIS 1332 proceedings. Please use following citation if you are going to use the ideas of this project.
+
+***Citation will be shown here after the end of ICONIP2020 conference***
+
 **Environments Used:**
 
 PyTorch: 1.2.0
