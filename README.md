@@ -10,7 +10,7 @@ The core blocks of code and the architecture of CNN are based on the paper of Sp
 **Publication:**
 The research paper of this project is accepted by ICONIP2020, and is published on the Springer CCIS 1332 proceedings. The title of the paper is **"MultiTune: Adaptive Integration of Multiple Fine-Tuning Models for Image Classification"** Please use following citation if you are going to use the ideas of this project.
 
-Wang Y., Plested J., Gedeon T. (2020) MultiTune: Adaptive Integration of Multiple Fine-Tuning Models for Image Classification. In: Yang H., Pasupa K., Leung A.CS., Kwok J.T., Chan J.H., King I. (eds) Neural Information Processing. ICONIP 2020. Communications in Computer and Information Science, vol 1332. Springer, Cham. https://doi.org/10.1007/978-3-030-63820-7_56
+**Wang Y., Plested J., Gedeon T. (2020) MultiTune: Adaptive Integration of Multiple Fine-Tuning Models for Image Classification. In: Yang H., Pasupa K., Leung A.CS., Kwok J.T., Chan J.H., King I. (eds) Neural Information Processing. ICONIP 2020. Communications in Computer and Information Science, vol 1332. Springer, Cham. https://doi.org/10.1007/978-3-030-63820-7_56**
 
 **Environments Used:**
 
